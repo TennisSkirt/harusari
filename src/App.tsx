@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { SettingsSheet } from './components/SettingsSheet'
 import { useApplySettings, useSettings } from './lib/settings'
 import { TodayPage } from './pages/TodayPage'
+import { TodoPage } from './pages/TodoPage'
 
 const TABS = [
   { id: 'today', label: '오늘', icon: '📖' },
@@ -13,10 +14,9 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id']
 
-const COMING: Record<Exclude<TabId, 'today'>, string> = {
+const COMING: Record<Exclude<TabId, 'today' | 'todo'>, string> = {
   planner: '데일리 · 위클리 플래너',
   calendar: '연간 · 월간 캘린더, 공휴일, D-day, 기념일',
-  todo: '오늘 / 예정 / 언젠가 / 완료 목록',
   memo: '서식 메모, 스티키 메모, 폴더, 검색',
 }
 
@@ -45,6 +45,8 @@ export default function App() {
       <main className="main">
         {tab === 'today' ? (
           <TodayPage />
+        ) : tab === 'todo' ? (
+          <TodoPage />
         ) : (
           <div className="page coming">
             <h2>{TABS.find((t) => t.id === tab)!.label}</h2>

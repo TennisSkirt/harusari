@@ -2,11 +2,13 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useRef, useState } from 'react'
 import { AutoText } from '../components/AutoText'
 import { TaskSheet } from '../components/TaskSheet'
-import { addTask, db, emptyDay, saveDay, updateTask, type Task } from '../lib/db'
+import { TodoRow } from '../components/TodoRow'
+import { addTask, db, emptyDay, saveDay, updateTask, type Category } from '../lib/db'
 import { addDays, dayOfYear, fromKey, MONTHS_EN, todayKey, toMinutes, WEEKDAYS_EN, WEEKDAYS_KO } from '../lib/date'
 import { useSettings } from '../lib/settings'
+import { itemKey, useCategoryMap, useTasksOn, type TaskItem } from '../lib/tasks'
 
-type SheetState = { task?: Task; defaults?: Partial<Task> } | null
+type SheetState = { task?: TaskItem; defaults?: Partial<TaskItem> } | null
 
 export function TodayPage() {
   const [dateKey, setDateKey] = useState(todayKey)
@@ -17,14 +19,12 @@ export function TodayPage() {
   const daysInYear = new Date(year, 1, 29).getMonth() === 1 ? 366 : 365
 
   const day = useLiveQuery(() => db.days.get(dateKey), [dateKey]) ?? emptyDay(dateKey)
-  const tasks = useLiveQuery(
-    () => db.tasks.where('date').equals(dateKey).filter((t) => !t.deleted).sortBy('order'),
-    [dateKey],
-  )
+  const tasks = useTasksOn(dateKey)
+  const cats = useCategoryMap()
   const overdue = useLiveQuery(
     () =>
       isToday
-        ? db.tasks.where('date').below(dateKey).filter((t) => !t.deleted && !t.done && !t.startTime).toArray()
+        ? db.tasks.where('date').below(dateKey).filter((t) => !t.deleted && !t.done && !t.series && !t.startTime).toArray()
         : [],
     [dateKey, isToday],
   )
@@ -112,6 +112,7 @@ export function TodayPage() {
           <h3 className="block-title">타임라인</h3>
           <Timeline
             tasks={timed}
+            cats={cats}
             showNow={isToday}
             onPickHour={(h) =>
               setSheet({ defaults: { date: dateKey, startTime: hhmm(h), endTime: h >= 23 ? '23:59' : hhmm(h + 1) } })
@@ -142,7 +143,12 @@ export function TodayPage() {
 
           <ul className="todo-list">
             {untimed.map((t) => (
-              <TodoItem key={t.id} task={t} onOpen={() => setSheet({ task: t })} />
+              <TodoRow
+                key={itemKey(t)}
+                task={t}
+                category={t.categoryId ? cats.get(t.categoryId) : undefined}
+                onOpen={() => setSheet({ task: t })}
+              />
             ))}
           </ul>
           <QuickAdd dateKey={dateKey} />
@@ -177,28 +183,6 @@ export function TodayPage() {
   )
 }
 
-function TodoItem({ task, onOpen }: { task: Task; onOpen: () => void }) {
-  return (
-    <li className={`todo ${task.done ? 'is-done' : ''}`}>
-      <button
-        className="check"
-        aria-label={task.done ? '완료 취소' : '완료'}
-        onClick={() => updateTask(task.id, { done: task.done ? 0 : 1 })}
-      >
-        {task.done ? '✓' : ''}
-      </button>
-      <button className="todo-title" onClick={onOpen}>
-        {task.title}
-      </button>
-      {!task.done && task.date && (
-        <button className="link small" onClick={() => updateTask(task.id, { date: addDays(task.date!, 1) })}>
-          내일로 →
-        </button>
-      )}
-    </li>
-  )
-}
-
 function QuickAdd({ dateKey }: { dateKey: string }) {
   const [title, setTitle] = useState('')
   return (
@@ -222,14 +206,16 @@ const hhmm = (h: number) => `${String(h).padStart(2, '0')}:00`
 
 function Timeline({
   tasks,
+  cats,
   showNow,
   onPickHour,
   onPickTask,
 }: {
-  tasks: Task[]
+  tasks: TaskItem[]
+  cats: Map<string, Category>
   showNow: boolean
   onPickHour: (h: number) => void
-  onPickTask: (t: Task) => void
+  onPickTask: (t: TaskItem) => void
 }) {
   const { timelineStart: start, timelineEnd: end } = useSettings()
   const hours = Array.from({ length: end - start }, (_, i) => start + i)
@@ -251,16 +237,23 @@ function Timeline({
         if (e <= start * 60 || s >= end * 60) return null
         return (
           <button
-            key={t.id}
-            className={`event ${t.done ? 'is-done' : ''}`}
-            style={{ top: ((s - start * 60) / 60) * HOUR_PX, height: Math.max(((e - s) / 60) * HOUR_PX - 2, 20) }}
+            key={itemKey(t)}
+            className={`event ${e - s < 45 ? 'is-short' : ''} ${t.done ? 'is-done' : ''} ${t.categoryId && cats.has(t.categoryId) ? 'has-cat' : ''}`}
+            style={{
+              top: ((s - start * 60) / 60) * HOUR_PX,
+              height: Math.max(((e - s) / 60) * HOUR_PX - 2, 20),
+              ...(t.categoryId && cats.has(t.categoryId) ? { '--cat': cats.get(t.categoryId)!.color } : {}),
+            } as React.CSSProperties}
             onClick={() => onPickTask(t)}
           >
             <span className="event-time">
               {t.startTime}
               {t.endTime && `–${t.endTime}`}
             </span>
-            <span className="event-title">{t.title}</span>
+            <span className="event-title">
+              {t.occurrence && '🔁 '}
+              {t.title}
+            </span>
           </button>
         )
       })}

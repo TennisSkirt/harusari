@@ -1,4 +1,5 @@
 import { FONTS, setSetting, useSettings, type FontKey, type ThemeMode } from '../lib/settings'
+import { CategoryManager } from './CategoryPicker'
 import { Sheet } from './Sheet'
 
 const THEMES: { id: ThemeMode; label: string }[] = [
@@ -53,6 +54,11 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="settings-section">
+          <h3>카테고리</h3>
+          <CategoryManager />
         </div>
       </div>
     </Sheet>
